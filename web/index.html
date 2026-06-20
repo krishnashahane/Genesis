@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Genesis OS — Console</title>
+  <style>
+    :root { --bg:#0b0f17; --panel:#121826; --line:#1f2937; --txt:#e5e7eb; --muted:#9ca3af; --accent:#6366f1; --ok:#10b981; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--bg); color:var(--txt); }
+    header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
+    header h1 { font-size:16px; margin:0; letter-spacing:.5px; }
+    header .dot { width:9px; height:9px; border-radius:50%; background:var(--ok); }
+    main { display:grid; grid-template-columns: 360px 1fr; gap:16px; padding:16px 24px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+    .panel h2 { font-size:12px; text-transform:uppercase; color:var(--muted); margin:0 0 12px; letter-spacing:1px; }
+    textarea { width:100%; height:90px; background:#0b0f17; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:10px; resize:vertical; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 14px; cursor:pointer; font-weight:600; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .phase { border-left:2px solid var(--accent); padding:8px 12px; margin:8px 0; background:#0b0f17; border-radius:0 8px 8px 0; }
+    .phase b { color:var(--accent); text-transform:uppercase; font-size:11px; }
+    .feed { max-height:300px; overflow:auto; font-size:12px; }
+    .ev { color:var(--muted); padding:2px 0; }
+    .ev span { color:var(--accent); }
+    pre { white-space:pre-wrap; word-break:break-word; margin:4px 0 0; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .kv { display:flex; justify-content:space-between; border-bottom:1px solid var(--line); padding:6px 0; }
+  </style>
+</head>
+<body>
+  <header><div class="dot"></div><h1>GENESIS OS</h1><span id="ver" style="color:var(--muted)"></span></header>
+  <main>
+    <div>
+      <div class="panel">
+        <h2>Run a goal</h2>
+        <textarea id="goal" placeholder="e.g. Design a rate limiter for the API"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="run">Execute loop</button>
+          <span id="status" style="color:var(--muted)"></span>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Health</h2>
+        <div id="health"></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>Live event feed</h2>
+        <div class="feed" id="feed"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Execution phases</h2>
+      <div id="phases"><span style="color:var(--muted)">No run yet.</span></div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const api = (p, o) => fetch("/api" + p, o).then(r => r.json());
+
+    async function loadHealth() {
+      const h = await api("/health");
+      $("#ver").textContent = "llm:" + h.llm + " · agents:" + h.agents.length;
+      $("#health").innerHTML = Object.entries(h).map(([k, v]) =>
+        `<div class="kv"><span>${k}</span><span>${Array.isArray(v) ? v.length : v}</span></div>`).join("");
+    }
+    async function loadFeed() {
+      const { events } = await api("/events?limit=25");
+      $("#feed").innerHTML = events.reverse().map(e =>
+        `<div class="ev"><span>${e.type}</span> ${e.source}</div>`).join("");
+    }
+    async function run() {
+      const goal = $("#goal").value.trim();
+      if (!goal) return;
+      $("#run").disabled = true; $("#status").textContent = "running…";
+      try {
+        const res = await api("/runs", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ goal }) });
+        $("#phases").innerHTML = res.phases.map(p =>
+          `<div class="phase"><b>${p.phase} · ${p.agent}</b><pre>${p.output}</pre></div>`).join("") +
+          (res.reflection ? `<div class="phase"><b>reflection</b><pre>${res.reflection}</pre></div>` : "");
+        $("#status").textContent = "done (" + res.phases.length + " phases)";
+      } catch (e) { $("#status").textContent = "error"; }
+      finally { $("#run").disabled = false; loadHealth(); loadFeed(); }
+    }
+    $("#run").addEventListener("click", run);
+    loadHealth(); loadFeed(); setInterval(loadFeed, 4000);
+  </script>
+</body>
+</html>
