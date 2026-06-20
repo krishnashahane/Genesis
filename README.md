@@ -1,4 +1,4 @@
-# Genesis
+# 🌌 Genesis
 
 **An open-source runtime and memory operating system for autonomous AI agents.**
 
@@ -174,4 +174,4 @@ auto-discovery, parallel multi-agent phases).
 
 ## License
 
-Apache-2.0.
+MIT License
