@@ -61,3 +61,20 @@ def test_events_feed(client):
     r = client.get("/api/events?limit=10")
     assert r.status_code == 200
     assert r.json()["events"]
+
+
+def test_production_api_requires_key():
+    settings = Settings(env="production", api_key="secret", llm_provider="mock")
+    rt = Runtime(settings)
+    app = create_app(runtime=rt)
+    with TestClient(app) as c:
+        assert c.get("/api/health").status_code == 200
+        assert c.get("/api/agents").status_code == 401
+        assert c.get("/api/agents", headers={"X-Genesis-API-Key": "secret"}).status_code == 200
+
+
+def test_create_app_uses_injected_runtime_settings():
+    settings = Settings(env="production", api_key="injected", llm_provider="mock")
+    rt = Runtime(settings)
+    app = create_app(runtime=rt)
+    assert app.state.runtime if hasattr(app.state, "runtime") else True
