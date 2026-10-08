@@ -33,6 +33,8 @@ async def metrics() -> dict:
 
 @router.get("/events", tags=["system"])
 async def events(request: Request, limit: int = 50, topic: str | None = None) -> dict:
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
     items = _rt(request).bus.history(limit=limit, topic=topic)
     return {"events": [e.model_dump(mode="json") for e in items]}
 
@@ -65,7 +67,7 @@ async def get_task(request: Request, task_id: str) -> dict:
 @router.get("/agents", tags=["agents"])
 async def list_agents(request: Request) -> dict:
     agents = _rt(request).agents
-    return {"agents": [{"role": r, "prompt": a.system_prompt} for r, a in agents.items()]}
+    return {"agents": [{"role": r} for r in agents]}
 
 
 @router.get("/tools", tags=["tools"])
