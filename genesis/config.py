@@ -27,8 +27,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # --- API ---
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"
     api_port: int = 8000
+    api_key: str = ""
+    cors_origins: str = ""
+    max_request_bytes: int = 1_000_000
 
     # --- Persistence backends (blank => in-memory fallback) ---
     redis_url: str = ""
