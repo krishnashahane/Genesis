@@ -21,7 +21,7 @@ _WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
-    settings = get_settings()
+    settings = runtime.settings if runtime is not None else get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
