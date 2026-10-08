@@ -64,9 +64,9 @@ class Runtime:
         # Every agent may run and use tools by default; tighten per deployment.
         for role in self.agents:
             self.permissions.grant(role, "agent.run")
-            self.permissions.grant(role, "tool.*")
+            self.permissions.grant(role, "tool.execute")
         # The REST API acts as a trusted principal for direct tool invocation.
-        self.permissions.grant("api", "tool.*")
+        self.permissions.grant("api", "tool.execute")
 
     async def start(self) -> None:
         if self._started:
