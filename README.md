@@ -1,177 +1,212 @@
-# 🌌 Genesis
+# Genesis
 
-**An open-source runtime and memory operating system for autonomous AI agents.**
+Genesis is a Python runtime for autonomous AI-agent systems. It combines an event bus, task queue, memory, permissions, tools, skills, reflection, specialist agents, and a data-driven execution loop behind one runtime.
 
-Genesis is a kernel for multi-agent systems. It gives a roster of specialist
-agents a shared brain (memory), a shared nervous system (an event bus), and a
-data-driven execution loop that takes a goal from **Observe → Plan → Research →
-Build → Review → Test → Debug → Optimize → Reflect → Store Memory** — then
-repeats, getting smarter each time through persistent reflection.
+The default configuration runs locally with a deterministic mock LLM and in-memory services. External providers and persistence backends are optional.
 
-It runs **with zero external services** out of the box (in-memory fallbacks for
-every backend) and scales up to Redis + PostgreSQL + ChromaDB for production.
+## Quick start
 
----
+Requirements:
 
-## Quickstart
+- Python 3.11+
+- pip
 
-```bash
-# 1. Install (core only — no heavy infra needed)
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+Install the core package:
 
-# 2. Run one full execution loop from the CLI
-python -m genesis run "Design a token-bucket rate limiter for the REST API"
+~~~bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+~~~
 
-# 3. Or start the REST API + Web UI
-python -m genesis serve          # → http://localhost:8000  (UI)  /docs (API)
+Run a goal:
 
-# 4. Run the tests
+~~~bash
+python -m genesis run "Design a token-bucket rate limiter"
+~~~
+
+Start the API and web UI:
+
+~~~bash
+python -m genesis serve
+~~~
+
+Open:
+
+- Web UI: `http://127.0.0.1:8000/`
+- API docs: `http://127.0.0.1:8000/docs`
+- Health: `http://127.0.0.1:8000/api/health`
+
+Run tests:
+
+~~~bash
+python -m pip install -e ".[dev]"
 pytest
-```
+~~~
 
-No API keys required: Genesis defaults to a deterministic **mock LLM** so the
-entire pipeline runs offline. Add a real provider when you want real reasoning:
+## LLM providers
 
-```bash
+Genesis defaults to `mock`, so the basic install does not require an API key or network access.
+
+### Anthropic
+
+Set:
+
+~~~bash
 export GENESIS_LLM_PROVIDER=anthropic
-export ANTHROPIC_API_KEY=sk-...
+export GENESIS_ANTHROPIC_API_KEY="..."
 export GENESIS_LLM_MODEL=claude-opus-4-8
-pip install -e ".[full]"         # installs anthropic, chromadb, redis, …
-```
+~~~
 
-### Docker
+The current default Anthropic model remains `claude-opus-4-8`, which Anthropic lists as active. citeturn774522search0
 
-```bash
-docker compose up --build        # Genesis + Redis + PostgreSQL
-```
+### Gemini
 
----
+The optional Gemini integration uses Google's current `google-genai` Python SDK rather than the legacy `google-generativeai` package. citeturn386523search1
 
-## Tech stack
+Install the full provider/backend set:
 
-| Layer | Technology | Role |
-|-------|-----------|------|
-| Language | **Python 3.11+** | Async-first core |
-| API | **FastAPI + Uvicorn** | REST API & Web UI host |
-| Orchestration | **Async execution loop** (+ optional **LangGraph**) | Data-driven phase graph |
-| Long-term memory | **ChromaDB** (vector) → in-memory fallback | Persistent semantic recall |
-| State / queues | **Redis** → in-memory fallback | Event mirror & task queue |
-| Relational | **PostgreSQL** (via SQLAlchemy/asyncpg) | Durable records (optional) |
-| LLM | **Anthropic Claude** / **Google Gemini** / **mock** | Pluggable reasoning |
-| Validation | **Pydantic v2** | Typed models & settings |
-| Observability | **structlog** + in-process metrics | Structured logs (stderr) + `/metrics` |
-| Packaging | **Docker / docker-compose** | Self-hosted deployment |
-| Tests / quality | **pytest, ruff, mypy** | 38 tests, 90%+ coverage |
+~~~bash
+python -m pip install -e ".[full]"
+~~~
 
-Every heavy dependency is **optional**. The core (`pip install -e .`) pulls only
-FastAPI, Pydantic, structlog, httpx, tenacity — and degrades gracefully when an
-infra backend or provider SDK is absent.
+Then set:
 
----
+~~~bash
+export GENESIS_LLM_PROVIDER=gemini
+export GENESIS_GEMINI_API_KEY="..."
+export GENESIS_LLM_MODEL=gemini-3.8-flash
+~~~
 
-## How it works
-
-```
-              ┌──────────────────── Runtime (kernel) ────────────────────┐
-   goal ──▶   │  EventBus · TaskQueue · MemoryEngine · ToolRegistry ·     │
-              │  SkillRegistry · KnowledgeGraph · PermissionManager ·     │
-              │  ReflectionEngine · Observability · LLM provider          │
-              └───────────────────────────┬──────────────────────────────┘
-                                          │  builds & injects into
-                                          ▼
-   ExecutionLoop  ── data-driven phase list (no hardcoded branching) ──▶ Agents
-   observe → plan → research → design → build → review → test → debug → optimize → document
-        each phase: recall memory → run agent → emit events → persist episodic memory
-                                          │
-                                          ▼
-                    Reflect → store a durable lesson → recalled on the next run
-```
-
-1. **A goal enters** via the CLI, REST API (`POST /api/runs`), or task queue.
-2. The **Execution Loop** walks a *list of phases* (`DEFAULT_PHASES`). There is no
-   `if phase == "plan"` logic anywhere — reorder/add/remove phases (or pass your
-   own list) to change the workflow. This satisfies the **no-hardcoded-workflows**
-   requirement.
-3. Each phase maps to a **specialist Agent** (CEO, Planner, Research, Architect,
-   Coder, Reviewer, Tester, Debugger, Optimizer, Reflection, Documentation). Every
-   agent shares the same kernel services and only declares its *identity* (role +
-   system prompt), so agents stay uniform and testable.
-4. Before acting, an agent **recalls relevant long-term memories** and threads the
-   previous phase's output forward via a shared blackboard.
-5. Every action is an **event** on the bus (`agent.started`, `tool.invoked`,
-   `memory.stored`, …). The Observability layer and Web UI live-feed subscribe to
-   `*`, giving a full audit trail. Agents talk to each other with `agent.message`
-   events — never direct calls.
-6. After the loop, the **Reflection Engine** distils a lesson, stores it as a
-   `reflection` memory, and emits `reflection.created`. On the next run, agents
-   recall that lesson — closing the **self-improvement loop**.
-
-### Core components
-
-- **Memory Engine** — short-term ring buffer (working memory) + long-term vector
-  store (persistent, semantic, survives restarts).
-- **Reflection Engine** — turns outcomes into reusable lessons.
-- **Runtime** — the kernel; wires and owns every subsystem (DI-friendly).
-- **Event Bus** — async pub/sub; topic + wildcard subscriptions; optional Redis mirror.
-- **Task Queue** — priority async queue, emits lifecycle events.
-- **Tool Registry** — permission-gated, audited tool execution; MCP/LLM-compatible schemas.
-- **Skill System** — composable, growable procedures above raw tools.
-- **Knowledge Graph** — entity/relationship triples agents learn.
-- **Permission System** — capability-based access control with wildcards.
-- **Observability Layer** — structured logs + metrics + event history.
-
----
+Real providers now fail fast when their API key or SDK is missing. Genesis does not silently substitute mock output when a real provider was explicitly requested.
 
 ## REST API
 
-| Method & path | Purpose |
-|---|---|
-| `GET /api/health` | Runtime & subsystem status |
-| `POST /api/runs` | Run the full loop for a goal |
-| `POST /api/tasks` · `GET /api/tasks/{id}` | Queue & inspect tasks |
-| `GET /api/agents` · `GET /api/tools` | Introspect the roster & capabilities |
-| `POST /api/tools/{name}/invoke` | Invoke a tool directly |
-| `POST /api/memory` · `POST /api/memory/recall` | Store & semantically recall memory |
-| `GET /api/events` · `GET /api/metrics` | Observability feed & metrics |
+The main endpoints are:
 
-Interactive docs at `/docs` (Swagger) when the server is running.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/health` | Runtime health |
+| POST | `/api/runs` | Execute the configured phase loop |
+| POST | `/api/tasks` | Queue a task |
+| GET | `/api/tasks` | List tasks |
+| GET | `/api/tasks/{id}` | Inspect a task |
+| GET | `/api/agents` | List agent roles |
+| GET | `/api/tools` | List tool schemas |
+| POST | `/api/tools/{name}/invoke` | Invoke an allowed tool |
+| POST | `/api/memory` | Store memory |
+| POST | `/api/memory/recall` | Recall memory |
+| GET | `/api/events` | Read recent events |
+| GET | `/api/metrics` | Read in-process metrics |
 
----
+In production, all API endpoints except health require `X-Genesis-API-Key`.
+
+## Production configuration
+
+Important settings use the `GENESIS_` prefix:
+
+~~~env
+GENESIS_ENV=production
+GENESIS_API_HOST=0.0.0.0
+GENESIS_API_PORT=8000
+GENESIS_API_KEY=replace-with-a-long-random-secret
+GENESIS_CORS_ORIGINS=https://your-ui.example
+GENESIS_MAX_REQUEST_BYTES=1000000
+
+GENESIS_LLM_PROVIDER=anthropic
+GENESIS_ANTHROPIC_API_KEY=...
+GENESIS_LLM_MODEL=claude-opus-4-8
+
+GENESIS_REDIS_URL=
+GENESIS_POSTGRES_DSN=
+GENESIS_CHROMA_PATH=./.genesis/chroma
+~~~
+
+The default API host is `127.0.0.1` for local safety. Set `GENESIS_API_HOST=0.0.0.0` only when you intentionally expose the service behind a network boundary or reverse proxy.
+
+CORS is disabled unless `GENESIS_CORS_ORIGINS` is configured. Production requests are authenticated with the configured API key.
+
+## Architecture
+
+~~~text
+goal
+  │
+  ▼
+ExecutionLoop
+  ├─ Phase → Agent → LLM
+  ├─ Memory recall/store
+  ├─ EventBus
+  └─ Reflection
+        │
+        ▼
+   Runtime services
+   ├─ TaskQueue
+   ├─ ToolRegistry + PermissionManager
+   ├─ SkillRegistry
+   ├─ KnowledgeGraph
+   └─ Observability
+~~~
+
+The workflow is data-driven: callers can pass a custom list of `Phase` objects instead of using `DEFAULT_PHASES`.
+
+## Memory
+
+Genesis maintains:
+
+- Short-term working memory in a bounded in-process deque.
+- Long-term memory through a pluggable vector store.
+- ChromaDB persistence when available.
+- A deterministic in-memory hashing embedder when ChromaDB is unavailable.
+
+The offline embedder uses a stable BLAKE2b-derived bucket index, so results do not change merely because Python started with a different hash seed.
+
+## Security
+
+- Production API access requires an API key.
+- Request bodies are rejected when their declared size exceeds `GENESIS_MAX_REQUEST_BYTES`.
+- API request models enforce field length/count bounds.
+- CORS is allowlist-based instead of wildcard-enabled.
+- Agent system prompts are no longer returned by the public agents endpoint.
+- Tool execution remains permission-gated.
+- The calculator tool parses an AST and never calls Python `eval`.
+- Generated Python bytecode, virtual environments, build output, and runtime state are ignored by Git.
+- The package no longer relies on committed `egg-info` metadata.
 
 ## Project layout
 
-```
-genesis/
-  config.py            # typed settings (env-driven, safe defaults)
-  observability.py     # structured logging + metrics
-  core/                # events, event_bus, task_queue, runtime (kernel)
-  memory/              # engine + vector_store (chroma | in-memory)
-  llm/                 # pluggable provider (mock | anthropic | gemini)
-  tools/               # registry + base + builtin tools
-  skills/              # skill registry
-  permissions/         # capability manager
-  knowledge/           # knowledge graph
-  reflection/          # reflection engine
-  agents/              # base agent + specialist roster
-  orchestrator/        # data-driven execution loop (+ langgraph builder)
-  api/                 # FastAPI app, routes, schemas
-web/                   # zero-build Web UI console
-tests/                 # 38 tests across every subsystem
-```
+~~~text
+Genesis/
+├── genesis/
+│   ├── agents/
+│   ├── api/
+│   ├── core/
+│   ├── knowledge/
+│   ├── llm/
+│   ├── memory/
+│   ├── orchestrator/
+│   ├── permissions/
+│   ├── skills/
+│   └── tools/
+├── tests/
+├── web/
+├── ARCHITECTURE.md
+├── README.md
+├── pyproject.toml
+└── LICENSE
+~~~
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for design rationale and the extension
-guide (custom agents, tools, skills, phases, and MCP servers).
+## Development
 
----
+Useful commands:
 
-## Status & roadmap
+~~~bash
+pytest
+ruff check .
+mypy genesis
+~~~
 
-This is **milestone 1**: a fully working, tested kernel + agent roster + loop +
-API/UI + Docker. Next milestones are tracked in `ARCHITECTURE.md` → *Roadmap*
-(LangGraph streaming, MCP client, Postgres-backed durable memory, plugin
-auto-discovery, parallel multi-agent phases).
+For production deployments, put Genesis behind an HTTPS reverse proxy and configure a strong `GENESIS_API_KEY`.
 
 ## License
 
-MIT License
+MIT
