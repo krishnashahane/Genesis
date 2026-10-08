@@ -1,6 +1,6 @@
 """Genesis — runtime and memory operating system for autonomous AI agents."""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 from genesis.config import Settings, get_settings
 

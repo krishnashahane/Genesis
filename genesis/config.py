@@ -1,16 +1,10 @@
-"""Central, typed configuration. Single source of truth for runtime settings.
-
-Settings are loaded from environment variables (prefixed ``GENESIS_``) and an
-optional ``.env`` file. Every value has a safe default so the system boots with
-zero configuration using in-memory fallbacks.
-"""
+"""Central, typed configuration for Genesis."""
 
 from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,42 +16,44 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- General ---
     env: Literal["development", "test", "production"] = "development"
     log_level: str = "INFO"
 
-    # --- API ---
+    # API
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_key: str = ""
     cors_origins: str = ""
     max_request_bytes: int = 1_000_000
+    rate_limit_per_minute: int = 30
 
-    # --- Persistence backends (blank => in-memory fallback) ---
+    # Optional infrastructure
     redis_url: str = ""
-    postgres_dsn: str = ""
     chroma_path: str = "./.genesis/chroma"
 
-    # --- LLM provider ---
+    # LLM
     llm_provider: Literal["mock", "anthropic", "gemini"] = "mock"
-    llm_model: str = "claude-opus-4-8"
-    anthropic_api_key: str = Field(default="")
-    gemini_api_key: str = Field(default="")
-
-    # --- Runtime tuning ---
-    max_loop_iterations: int = 12
-    task_concurrency: int = 4
+    llm_model: str = "claude-sonnet-5-5"
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
 
     @property
-    def use_redis(self) -> bool:
-        return bool(self.redis_url)
+    def anthropic_model(self) -> str:
+        return self.llm_model or "claude-sonnet-5-5"
 
     @property
-    def use_postgres(self) -> bool:
-        return bool(self.postgres_dsn)
+    def gemini_model(self) -> str:
+        return self.llm_model if self.llm_model.startswith("gemini-") else "gemini-3.8-flash"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    @lru_cache
+    def _validated_placeholder(self) -> bool:
+        return True
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return a process-wide cached Settings instance."""
     return Settings()

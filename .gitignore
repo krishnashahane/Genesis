@@ -7,10 +7,9 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-*.egg-info/
-.eggs/
-dist/
 build/
+dist/
+*.egg-info/
 .genesis/
 .env
 .env.*
