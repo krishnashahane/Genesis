@@ -63,6 +63,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
 
         if (
             settings.env == "production"
+            and request.method != "OPTIONS"
             and request.url.path.startswith("/api/")
             and request.url.path != "/api/health"
         ):
