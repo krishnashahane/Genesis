@@ -83,29 +83,32 @@ class GeminiProvider:  # pragma: no cover - requires network/SDK
     name = "gemini"
 
     def __init__(self, api_key: str, model: str) -> None:
-        import google.generativeai as genai
+        from google import genai
 
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model)
+        self._client = genai.Client(api_key=api_key)
+        self._model = model
 
     async def complete(self, messages: list[Message], **kwargs: object) -> str:
         METRICS.incr("llm.calls")
         prompt = "\n\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
-        resp = await self._model.generate_content_async(prompt)
-        return resp.text or ""
+        response = await self._client.aio.models.generate_content(
+            model=self._model,
+            contents=prompt,
+        )
+        return response.text or ""
 
 
 def build_llm(settings: Settings) -> LLMProvider:
-    """Construct the configured provider, falling back to mock on any problem."""
+    """Construct the configured provider and fail fast on misconfiguration."""
     provider = settings.llm_provider
-    try:
-        if provider == "anthropic" and settings.anthropic_api_key:
-            return AnthropicProvider(settings.anthropic_api_key, settings.llm_model)
-        if provider == "gemini" and settings.gemini_api_key:
-            return GeminiProvider(settings.gemini_api_key, settings.llm_model)
-    except Exception as exc:  # pragma: no cover
-        log.warning("llm.fallback_to_mock", requested=provider, error=str(exc))
+    if provider == "mock":
         return MockProvider()
-    if provider != "mock":
-        log.warning("llm.missing_key", requested=provider)
-    return MockProvider()
+    if provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise ValueError("GENESIS_ANTHROPIC_API_KEY is required for the anthropic provider.")
+        return AnthropicProvider(settings.anthropic_api_key, settings.llm_model)
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            raise ValueError("GENESIS_GEMINI_API_KEY is required for the gemini provider.")
+        return GeminiProvider(settings.gemini_api_key, settings.llm_model)
+    raise ValueError(f"Unsupported LLM provider: {provider}")
