@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # --- LLM provider ---
     llm_provider: Literal["mock", "anthropic", "gemini"] = "mock"
     llm_model: str = "claude-opus-4-8"
-    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
-    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    anthropic_api_key: str = Field(default="")
+    gemini_api_key: str = Field(default="")
 
     # --- Runtime tuning ---
     max_loop_iterations: int = 12
