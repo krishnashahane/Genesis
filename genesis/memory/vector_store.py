@@ -12,6 +12,7 @@ The factory ``build_vector_store`` picks the best available backend.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from collections import Counter
@@ -30,7 +31,8 @@ def _embed(text: str) -> list[float]:
     """Deterministic hashing embedding — no model, no network, fully offline."""
     vec = [0.0] * _EMBED_DIM
     for token, count in Counter(_TOKEN.findall(text.lower())).items():
-        vec[hash(token) % _EMBED_DIM] += float(count)
+        bucket = int.from_bytes(hashlib.blake2b(token.encode(), digest_size=8).digest(), "big") % _EMBED_DIM
+        vec[bucket] += float(count)
     norm = math.sqrt(sum(v * v for v in vec)) or 1.0
     return [v / norm for v in vec]
 
